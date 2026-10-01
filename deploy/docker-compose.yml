@@ -1,0 +1,58 @@
+#
+# Hermes Agent — stack local para Docker Desktop (Windows)
+#
+# Um único container: o s6-overlay dentro da imagem supervisiona o gateway
+# e o dashboard. NÃO separar o dashboard em outro container — ele precisa
+# compartilhar o PID namespace do gateway, e dois containers no mesmo volume
+# de dados corrompem sessions/memory.
+#
+# Uso:
+#   docker compose up -d
+#   docker compose logs -f
+#
+# Segredos (chave de LLM, token do Telegram) NÃO ficam aqui: eles vivem em
+# /opt/data/.env dentro do volume, escritos pelo wizard `hermes setup`.
+# Só as credenciais do dashboard ficam no .env ao lado deste arquivo, porque
+# o gate de auth é lido na subida do serviço e sem elas o dashboard não sobe.
+#
+name: hermes
+
+services:
+  hermes:
+    image: nousresearch/hermes-agent:v2026.9.14
+    container_name: hermes
+    restart: unless-stopped
+    command: ["gateway", "run"]
+
+    # Playwright/Chromium precisa de memória compartilhada.
+    shm_size: 1gb
+
+    volumes:
+      - hermes-data:/opt/data
+
+    # Publicado só em loopback. O dashboard guarda chaves de API —
+    # nunca exponha na LAN sem um proxy autenticado à frente.
+    ports:
+      - "127.0.0.1:9119:9119"
+
+    environment:
+      - HERMES_DASHBOARD=1
+      # 0.0.0.0 é o bind DENTRO do container (senão a porta publicada não
+      # é alcançável). O isolamento vem do 127.0.0.1 no mapeamento acima.
+      - HERMES_DASHBOARD_HOST=0.0.0.0
+      - HERMES_DASHBOARD_PORT=9119
+      # Bind não-loopback exige um provider de auth, senão o dashboard
+      # falha fechado na subida. Estes três vêm do .env local.
+      - HERMES_DASHBOARD_BASIC_AUTH_USERNAME=${HERMES_DASHBOARD_BASIC_AUTH_USERNAME:?defina no deploy/.env}
+      - HERMES_DASHBOARD_BASIC_AUTH_PASSWORD=${HERMES_DASHBOARD_BASIC_AUTH_PASSWORD:?defina no deploy/.env}
+      # Sem o SECRET a sessão cai a cada restart do container.
+      - HERMES_DASHBOARD_BASIC_AUTH_SECRET=${HERMES_DASHBOARD_BASIC_AUTH_SECRET:?defina no deploy/.env}
+
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+          cpus: "2.0"
+
+volumes:
+  hermes-data:
