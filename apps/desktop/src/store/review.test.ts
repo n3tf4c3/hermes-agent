@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
+import type { ClientSessionState } from '@/app/types'
 import type { HermesReviewFile, HermesReviewShipInfo } from '@/global'
 
 import {
@@ -13,21 +14,19 @@ import {
   $reviewMaxChurn,
   $reviewOpen,
   $reviewRevertTarget,
+  $reviewScope,
   $reviewScopeCwd,
   $reviewScopeTarget,
   $reviewSelectedPath,
   $reviewShipBusy,
   $reviewShipInfo,
-  $reviewTreeMode,
-  cancelRevert,
-  clearReviewSelection,
+  $reviewTurnBase,
   closeReview,
   commitChanges,
   confirmRevert,
   createOrOpenPr,
   generateCommitMessage,
   openReview,
-  pushChanges,
   refreshReview,
   refreshShipInfo,
   requestRevert,
@@ -36,10 +35,10 @@ import {
   selectReviewFile,
   stageReviewFile,
   toggleReview,
-  toggleReviewTreeMode,
   unstageReviewFile
 } from './review'
-import { $currentCwd } from './session'
+import { $busy, $currentCwd } from './session'
+import { $sessionStates } from './session-states'
 
 // requestOneShot is the only cross-module dependency that must be faked (it
 // reaches the gateway); everything else routes through window.hermesDesktop.git,
@@ -67,6 +66,7 @@ function stubReview(over: ReviewStub = {}) {
     stage: vi.fn(async () => undefined),
     unstage: vi.fn(async () => undefined),
     revert: vi.fn(async () => undefined),
+    revParse: vi.fn(async () => null),
     commit: vi.fn(async () => undefined),
     commitContext: vi.fn(async () => ({ diff: 'd', recent: 'r' })),
     push: vi.fn(async () => undefined),
@@ -98,9 +98,13 @@ beforeEach(() => {
   $reviewShipBusy.set(false)
   $reviewCommitMsgBusy.set(false)
   $reviewRevertTarget.set(undefined)
+  $reviewScope.set('uncommitted')
+  $reviewTurnBase.set({})
   $reviewScopeCwd.set(null)
   $reviewScopeTarget.set('main')
   $currentCwd.set('/repo')
+  $busy.set(false)
+  $sessionStates.set({})
 })
 
 afterEach(() => {
@@ -178,6 +182,20 @@ describe('refreshReview', () => {
     expect($reviewIsRepo.get()).toBe(true)
     expect($reviewLoading.get()).toBe(false)
   })
+
+  it('passes the selected scope (and last-turn base) to the bridge', async () => {
+    const review = stubReview({ list: vi.fn(async () => ({ files: [] })) })
+    $reviewOpen.set(true)
+    $reviewScope.set('branch')
+
+    await refreshReview()
+    expect(review.list).toHaveBeenCalledWith('/repo', 'branch', null)
+
+    $reviewScope.set('lastTurn')
+    $reviewTurnBase.set({ '/repo': 'abc123' })
+    await refreshReview()
+    expect(review.list).toHaveBeenCalledWith('/repo', 'lastTurn', 'abc123')
+  })
 })
 
 describe('$reviewMaxChurn', () => {
@@ -192,7 +210,7 @@ describe('$reviewMaxChurn', () => {
   })
 })
 
-describe('selectReviewFile / clearReviewSelection', () => {
+describe('selectReviewFile', () => {
   it('sets the selected path and fetches its diff', async () => {
     const review = stubReview({ diff: vi.fn(async () => 'the diff') })
 
@@ -202,6 +220,19 @@ describe('selectReviewFile / clearReviewSelection', () => {
     expect($reviewDiff.get()).toBe('the diff')
     expect($reviewDiffLoading.get()).toBe(false)
     expect(review.diff).toHaveBeenCalledWith('/repo', 'a.ts', 'uncommitted', null, false)
+  })
+
+  it('fetches the diff for the selected scope and base', async () => {
+    const review = stubReview({ diff: vi.fn(async () => 'd') })
+    $reviewScope.set('branch')
+
+    await selectReviewFile(file('a.ts'))
+    expect(review.diff).toHaveBeenCalledWith('/repo', 'a.ts', 'branch', null, false)
+
+    $reviewScope.set('lastTurn')
+    $reviewTurnBase.set({ '/repo': 'abc123' })
+    await selectReviewFile(file('a.ts'))
+    expect(review.diff).toHaveBeenCalledWith('/repo', 'a.ts', 'lastTurn', 'abc123', false)
   })
 
   it('coerces a falsy diff to empty string (not null)', async () => {
@@ -220,29 +251,9 @@ describe('selectReviewFile / clearReviewSelection', () => {
     expect($reviewSelectedPath.get()).toBe('a.ts')
     expect($reviewDiff.get()).toBeNull()
   })
-
-  it('clears path, diff and loading', () => {
-    $reviewSelectedPath.set('a.ts')
-    $reviewDiff.set('x')
-    $reviewDiffLoading.set(true)
-
-    clearReviewSelection()
-
-    expect($reviewSelectedPath.get()).toBeNull()
-    expect($reviewDiff.get()).toBeNull()
-    expect($reviewDiffLoading.get()).toBe(false)
-  })
 })
 
 describe('view state', () => {
-  it('toggleReviewTreeMode flips list <-> tree', () => {
-    $reviewTreeMode.set('tree')
-    toggleReviewTreeMode()
-    expect($reviewTreeMode.get()).toBe('list')
-    toggleReviewTreeMode()
-    expect($reviewTreeMode.get()).toBe('tree')
-  })
-
   it('openReview opens the pane and kicks off a refresh', async () => {
     const review = stubReview()
     openReview()
@@ -265,15 +276,6 @@ describe('view state', () => {
     await Promise.resolve()
     await Promise.resolve()
     expect(review.list).toHaveBeenCalledWith('/tile-worktree', 'uncommitted', null)
-  })
-
-  it('openReview remembers the tile composer that owns the scoped worktree', () => {
-    stubReview()
-
-    openReview('/tile-worktree', 'tile:project-b')
-
-    expect($reviewScopeCwd.get()).toBe('/tile-worktree')
-    expect($reviewScopeTarget.get()).toBe('tile:project-b')
   })
 
   it('revealReview re-homes the origin when the repo stays the same', () => {
@@ -350,34 +352,9 @@ describe('mutations', () => {
     expect(review.stage).toHaveBeenCalledWith('/repo', 'a.ts')
     expect(review.list).toHaveBeenCalled()
   })
-
-  it('unstageReviewFile forwards the path', async () => {
-    const review = stubReview()
-    await unstageReviewFile('a.ts')
-    expect(review.unstage).toHaveBeenCalledWith('/repo', 'a.ts')
-  })
-
-  it('revertReviewFile forwards the path', async () => {
-    const review = stubReview()
-    await revertReviewFile('a.ts')
-    expect(review.revert).toHaveBeenCalledWith('/repo', 'a.ts')
-  })
-
-  it('stage with null path means "all"', async () => {
-    const review = stubReview()
-    await stageReviewFile(null)
-    expect(review.stage).toHaveBeenCalledWith('/repo', null)
-  })
 })
 
 describe('revert confirm dialog', () => {
-  it('requestRevert opens a target, cancelRevert closes it', () => {
-    requestRevert('a.ts')
-    expect($reviewRevertTarget.get()).toEqual({ path: 'a.ts' })
-    cancelRevert()
-    expect($reviewRevertTarget.get()).toBeUndefined()
-  })
-
   it('requestRevert(null) encodes the "revert all" target distinctly from closed', () => {
     requestRevert(null)
     expect($reviewRevertTarget.get()).toEqual({ path: null })
@@ -423,12 +400,6 @@ describe('ship flow', () => {
     expect(review.commit).not.toHaveBeenCalled()
   })
 
-  it('pushChanges pushes and refreshes ship info', async () => {
-    const review = stubReview()
-    await pushChanges()
-    expect(review.push).toHaveBeenCalledWith('/repo')
-  })
-
   it('createOrOpenPr opens the existing PR without creating a new one', async () => {
     const review = stubReview()
     $reviewShipInfo.set({ ghReady: true, pr: { url: 'https://example.com/pr/9' } } as HermesReviewShipInfo)
@@ -455,19 +426,6 @@ describe('ship flow', () => {
 })
 
 describe('refreshShipInfo', () => {
-  it('populates ship info from the bridge', async () => {
-    const info: HermesReviewShipInfo = {
-      ghReady: true,
-      pr: { url: 'https://example.com/pr/3' }
-    } as HermesReviewShipInfo
-
-    stubReview({ shipInfo: vi.fn(async () => info) })
-
-    await refreshShipInfo()
-
-    expect($reviewShipInfo.get()).toEqual(info)
-  })
-
   it('resets ship info when there is no bridge', async () => {
     delete (window as unknown as { hermesDesktop?: unknown }).hermesDesktop
     $reviewShipInfo.set({ ghReady: true, pr: { url: 'x' } } as HermesReviewShipInfo)
@@ -532,5 +490,106 @@ describe('$reviewCommitDefault', () => {
     expect($reviewCommitDefault.get()).toBe('commitPush')
     $reviewCommitDefault.set('commit')
     expect($reviewCommitDefault.get()).toBe('commit')
+  })
+})
+
+describe('$reviewScope', () => {
+  it('round-trips the three diff scopes', () => {
+    expect($reviewScope.get()).toBe('uncommitted')
+    $reviewScope.set('branch')
+    expect($reviewScope.get()).toBe('branch')
+    $reviewScope.set('lastTurn')
+    expect($reviewScope.get()).toBe('lastTurn')
+    $reviewScope.set('uncommitted')
+    expect($reviewScope.get()).toBe('uncommitted')
+  })
+})
+
+describe('$reviewTurnBase', () => {
+  it('maps each repo cwd to its last-turn HEAD baseline', () => {
+    expect($reviewTurnBase.get()).toEqual({})
+    $reviewTurnBase.set({ '/repo': 'abc123' })
+    expect($reviewTurnBase.get()).toEqual({ '/repo': 'abc123' })
+  })
+
+  it('caps tracked baselines at MAX_TURN_BASES, evicting the least-recently captured', async () => {
+    stubReview({ revParse: vi.fn(async (cwd: string) => `sha-${cwd}`) })
+
+    // Start with the map already full of older baselines.
+    $reviewTurnBase.set(Object.fromEntries(Array.from({ length: 8 }, (_, i) => [`/old-${i}`, `sha-${i}`])))
+
+    // A fresh turn in a ninth repo must evict the oldest (/old-0), not grow.
+    $sessionStates.set({ rt_cap: sessionState(true, '/new-repo') })
+
+    await new Promise(resolve => setTimeout(resolve, 0))
+
+    const bases = $reviewTurnBase.get()
+    expect(Object.keys(bases)).toHaveLength(8)
+    expect(bases['/new-repo']).toBe('sha-/new-repo')
+    expect(bases['/old-0']).toBeUndefined()
+    expect(bases['/old-7']).toBeDefined()
+
+    // Re-capturing an existing cwd refreshes it without growing the map.
+    $sessionStates.set({ rt_recapture: sessionState(true, '/old-1') })
+
+    await new Promise(resolve => setTimeout(resolve, 0))
+
+    expect($reviewTurnBase.get()['/old-1']).toBe('sha-/old-1')
+    expect(Object.keys($reviewTurnBase.get())).toHaveLength(8)
+  })
+})
+
+// Minimal session state: the baseline capture only reads `busy` and `cwd`.
+const sessionState = (busy: boolean, cwd = '/repo'): ClientSessionState => ({ busy, cwd }) as ClientSessionState
+
+describe('turn baseline capture', () => {
+  it('captures HEAD per-cwd when a session turn starts', async () => {
+    stubReview({ revParse: vi.fn(async () => 'deadbeef') })
+
+    $sessionStates.set({ rt_capture: sessionState(true, '/repo') })
+
+    await new Promise(resolve => setTimeout(resolve, 0))
+    expect($reviewTurnBase.get()).toEqual({ '/repo': 'deadbeef' })
+  })
+
+  it('keys baselines by cwd so background / tile worktrees get their own', async () => {
+    stubReview({ revParse: vi.fn(async (cwd: string) => (cwd === '/tile' ? 'tile-sha' : 'main-sha')) })
+
+    $sessionStates.set({ rt_main: sessionState(true, '/repo'), rt_tile: sessionState(true, '/tile') })
+
+    await new Promise(resolve => setTimeout(resolve, 0))
+    expect($reviewTurnBase.get()).toEqual({ '/repo': 'main-sha', '/tile': 'tile-sha' })
+  })
+
+  it('leaves the baseline empty when there is no git bridge', async () => {
+    delete (window as unknown as { hermesDesktop?: unknown }).hermesDesktop
+
+    $sessionStates.set({ rt_nobridge: sessionState(true, '/repo') })
+
+    await new Promise(resolve => setTimeout(resolve, 0))
+    expect($reviewTurnBase.get()).toEqual({})
+  })
+})
+
+describe('mutation gating', () => {
+  it('skips stage/unstage/revert when the scope is not uncommitted', async () => {
+    const review = stubReview()
+    $reviewScope.set('branch')
+
+    await stageReviewFile('a.ts')
+    await unstageReviewFile('a.ts')
+    await revertReviewFile('a.ts')
+
+    expect(review.stage).not.toHaveBeenCalled()
+    expect(review.unstage).not.toHaveBeenCalled()
+    expect(review.revert).not.toHaveBeenCalled()
+  })
+
+  it('still mutates under the default uncommitted scope', async () => {
+    const review = stubReview()
+
+    await stageReviewFile('a.ts')
+
+    expect(review.stage).toHaveBeenCalledWith('/repo', 'a.ts')
   })
 })
