@@ -15,6 +15,7 @@ Python agent core shared by CLI, messaging gateway, Ink TUI and Electron desktop
 | `gateway/`, platforms and delivery | [gateway](gateway/AGENTS.md) |
 | `tools/`, `toolsets.py`, `model_tools.py` | [tools](tools/AGENTS.md) |
 | Plugins and `hermes_cli/plugins*.py` | [plugins](plugins/AGENTS.md) |
+| Plugin catalog entries | `plugin-catalog/README.md` and the matching submission guide |
 | `tui_gateway/` and `ui-tui/` | [TUI/RPC](tui_gateway/AGENTS.md) |
 | `web/` and `hermes_cli/web_routers/` | [dashboard](web/AGENTS.md) |
 | `apps/desktop/` | [desktop](apps/desktop/AGENTS.md), then [renderer](apps/desktop/src/AGENTS.md) for its scope |
@@ -23,6 +24,9 @@ Python agent core shared by CLI, messaging gateway, Ink TUI and Electron desktop
 | New messaging adapter | [adapter guide](gateway/platforms/ADDING_A_PLATFORM.md) |
 | Profiles/multiplex/secrets (any area) | Gateway profile-scope contract and `website/docs/user-guide/multi-profile-gateways.md` |
 | Session storage | `hermes_state.py` facade and topic siblings; contribution reference for binding/compat rules |
+| Tests and native platform lanes | [tests](tests/AGENTS.md) |
+| Package management and Python dependencies | [PM](pm/AGENTS.md) |
+| Machine facts and executable lookup | [platform](hermes_platform/AGENTS.md) |
 
 ## Load-bearing rules
 - Keep a byte-stable system prompt and cached prefix for a conversation. Do not mutate past context, reload memory or swap toolsets mid-turn; compression is the exception. Prompt-state changes are deferred by default, with explicit opt-in immediate invalidation.
@@ -33,8 +37,11 @@ Python agent core shared by CLI, messaging gateway, Ink TUI and Electron desktop
 - Facades expose entry points; topical siblings own behavior. Preserve late binding and patch the site production reads. In-tree callers cannot use external compatibility shims; moves update docs in the same change.
 - Avoid dead code, speculative extension points, no-op wrappers and condition ladders where dispatch tables apply. No pagination escape hatch for tools that must load a whole skill/prompt/playbook.
 - Dependencies keep upper bounds/commit pins according to the contribution reference; update `uv.lock` when changing Python dependencies. TypeScript UI uses small shared nanostores, thin routes and public prop interfaces.
+- Resolve machine facts and executables through `hermes_platform`; use canonical process-identity matchers rather than argv substrings. Hermes environments are owned by PM, not raw pip/uv changes.
+- `SECURITY.md` defines disclosure scope: section 3.1 findings use private reporting; section 3.2 hardening follows ordinary public contributions.
 
 ## Validation and contributions
+- Run `python scripts/check` for CI's blocking lint checks; `tests/AGENTS.md` owns the current runner and platform contracts, and `pm/AGENTS.md` owns environment preparation.
 - Python tests ALWAYS use `scripts/run_tests.sh` (in Git Bash/compatible shell on Windows), with the affected `tests/<area>/` or test file. It isolates credentials/home, timezone and subprocess state. Use the full suite when the change requires the full gate.
 - Tests mirror source areas; JS behavior goes to the JS suite, not a Python source-text assertion. Tests check invariants, not changing catalog counts or file text; prove behavior red on base and green after a fix.
 - I/O/config/security/resolution changes exercise the real path with disposable state. Profile changes need two isolated homes with A→B→A, not one mocked home. Tests never write to the real `~/.hermes`.
