@@ -11,6 +11,7 @@ Use scoped rg searches; expand only when the dependency/contract requires it. Re
 - Both inbound guards (base adapter and busy gateway) must bypass approval/control commands; never fix just one.
 - Preserve stream-is-the-message delivery: no duplicate final send, and no background completion attributed to a different conversation/profile.
 - Background completion injection requires an `admit_internal_event` receipt. Refused admission refunds all claimed batch siblings without spending an attempt.
+- Canonical local completion/watch events use the same durable FIFO as human input. Observers never consume turns; an interrupted started turn remains unknown and pauses followers.
 - The gateway has its own raw YAML loader. Resolve configuration at the actual consumer; do not assume CLI DEFAULT_CONFIG covers gateway settings.
 - Messaging gateway survives desktop exit; lifecycle, locks and remote-profile scope are distinct. Paired off-turn login remains authorization-gated.
 - Every adapter/turn/callback/child environment binds the owning profile. Under multiplex, unscoped reads fail closed and adapter YAML never leaks into process-global env.

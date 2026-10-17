@@ -3,7 +3,7 @@
 Root project rules apply. CLAUDE.md imports this local guide; detailed contracts live in [reference](AGENT_REFERENCE.md).
 
 ## Start here
-Entry facade: `../run_agent.py`. Turn loop: `conversation_loop.py` and `turn_*.py`. Startup: `agent_init.py`. Prompt/context: `prompt_builder.py`. Compression: `compression_facade.py` and topic siblings. Providers: resolution/auth modules in this directory.
+Entry facade: `../run_agent.py`. Turn loop: `conversation_loop.py` and `turn_*.py`; `turn_scripted_prelude.py` owns prompt built-in tool calls before the first model call. Startup: `agent_init.py`. Prompt/context: `prompt_builder.py`. Compression: `compression_facade.py` and topic siblings. Providers: resolution/auth modules in this directory.
 
 Use scoped rg searches; expand only when the dependency/contract requires it. Read the sections listed below before changing the related behavior.
 

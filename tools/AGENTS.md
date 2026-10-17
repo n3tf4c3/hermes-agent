@@ -9,7 +9,7 @@ Use scoped rg searches; expand only when the dependency/contract requires it. Re
 
 ## Invariants
 - Settle the root footprint ladder before adding a core tool. Local/custom integrations use plugins; new core surface requires an explicitly requested contribution.
-- Handlers return JSON strings. Registration is auto-discovered; package tools use their tool.py entry and required __init__.py.
+- Handlers return JSON strings, except pixel-producing tools may return the registry's exact multimodal envelope through the shared native vision path. Registration is auto-discovered; package tools use their tool.py entry and required __init__.py.
 - Tool schema descriptions cannot name tools from another toolset or expose machine-specific home paths. check_fn is reachability/opt-in, never session surface.
 - Preserve agent-level tool interception, child-local tool-name sets, provider/profile scope and bounded subprocess environments.
 - Native vision content is history, not a one-shot payload. Subprocess spawning uses the common environment builder; teardown signals the parent first.

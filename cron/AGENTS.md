@@ -9,6 +9,8 @@ Use scoped rg searches; expand only when the dependency/contract requires it. Re
 
 ## Invariants
 - Preserve inactivity/script timeouts, catch-up/grace, error reporting and overlap/claim guards. A live but active job must not be killed as idle.
+- Job scripts are files under `HERMES_HOME/scripts/`, never command lines. Headless ticks refuse agent jobs without an owning gateway instead of spawning a daemon; leave the due instant untouched and record the error.
+- Worker recovery replays bootstrap and interrupted-pull recovery before reading the payload or acknowledging ownership.
 - The ticker binds each owning profile for the whole tick, including pre-loop config/probes. Cron ownership is not gated by the messaging multiplex flag.
 - Release claims under the key they were registered with, reclaim ticked-home state and stand down when that profile has its own gateway.
 - Work that must survive process restarts uses persisted cron/kanban ownership; process-local background delegation is not durable scheduling.
