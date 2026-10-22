@@ -57,11 +57,23 @@ from openai import AsyncOpenAI
 
 load_dotenv()
 
-# Initialize Nous Research API client for MoA processing
-nous_client = AsyncOpenAI(
-    api_key="sk-_yoJ_CBLbSNN2R5rGZ_rpg",
-    base_url="https://inference-api.nousresearch.com/v1"
-)
+# Initialize the client only when the configured API key is needed.
+nous_client = None
+
+
+def _get_nous_client() -> AsyncOpenAI:
+    global nous_client
+
+    api_key = os.getenv("NOUS_API_KEY")
+    if not api_key:
+        raise ValueError("NOUS_API_KEY environment variable not set")
+
+    if nous_client is None:
+        nous_client = AsyncOpenAI(
+            api_key=api_key,
+            base_url="https://inference-api.nousresearch.com/v1"
+        )
+    return nous_client
 
 # Configuration for MoA processing
 # Reference models - these generate diverse initial responses in parallel
@@ -198,7 +210,7 @@ async def _run_reference_model_safe(
             if not model.lower().startswith('gpt-'):
                 api_params["temperature"] = temperature
             
-            response = await nous_client.chat.completions.create(**api_params)
+            response = await _get_nous_client().chat.completions.create(**api_params)
             
             content = response.choices[0].message.content.strip()
             print(f"✅ {model} responded ({len(content)} characters)")
@@ -259,7 +271,7 @@ async def _run_aggregator_model(
     if not AGGREGATOR_MODEL.lower().startswith('gpt-'):
         api_params["temperature"] = temperature
     
-    response = await nous_client.chat.completions.create(**api_params)
+    response = await _get_nous_client().chat.completions.create(**api_params)
     
     content = response.choices[0].message.content.strip()
     print(f"✅ Aggregation complete ({len(content)} characters)")
