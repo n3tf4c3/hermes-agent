@@ -1,5 +1,9 @@
 #
-# Hermes Agent — stack local para Docker Desktop (Windows)
+# Hermes Agent — serviço único em Docker
+#
+# Espelha o serviço `hermes` do compose canônico do servidor: imagem oficial
+# fixada por digest (manifest list, serve amd64 e arm64) e o endurecimento
+# usado em produção. Funciona em Docker Desktop ou num host Linux.
 #
 # Um único container: o s6-overlay dentro da imagem supervisiona o gateway
 # e o dashboard. NÃO separar o dashboard em outro container — ele precisa
@@ -10,6 +14,9 @@
 #   docker compose up -d
 #   docker compose logs -f
 #
+# Atualizar: backup do volume, `docker pull` da tag nova, fixar o digest
+# abaixo, `docker compose config -q` e `up -d --dry-run`, depois `up -d`.
+#
 # Segredos (chave de LLM, token do Telegram) NÃO ficam aqui: eles vivem em
 # /opt/data/.env dentro do volume, escritos pelo wizard `hermes setup`.
 # Só as credenciais do dashboard ficam no .env ao lado deste arquivo, porque
@@ -19,13 +26,24 @@ name: hermes
 
 services:
   hermes:
-    image: nousresearch/hermes-agent:v2026.9.14
+    image: nousresearch/hermes-agent:v0.22.5@sha256:9c5561579f3ffdf333401797094ac3a743738d6c25d40f4331c7bf77b694238d
     container_name: hermes
     restart: unless-stopped
     command: ["gateway", "run"]
 
+    # Mínimo de privilégios: o entrypoint só precisa trocar de usuário e
+    # ajustar donos de arquivos no volume.
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: [ALL]
+    cap_add: [CHOWN, DAC_OVERRIDE, FOWNER, SETUID, SETGID, KILL]
+    pids_limit: 512
+
     # Playwright/Chromium precisa de memória compartilhada.
     shm_size: 1gb
+    mem_limit: 4g
+    cpus: "2.0"
+
+    networks: [hermes]
 
     volumes:
       - hermes-data:/opt/data
@@ -48,11 +66,13 @@ services:
       # Sem o SECRET a sessão cai a cada restart do container.
       - HERMES_DASHBOARD_BASIC_AUTH_SECRET=${HERMES_DASHBOARD_BASIC_AUTH_SECRET:?defina no deploy/.env}
 
-    deploy:
-      resources:
-        limits:
-          memory: 4G
-          cpus: "2.0"
+# Rede própria: serviços com entrada externa não compartilham rede com
+# serviços sem autenticação no mesmo host.
+networks:
+  hermes:
+    ipam:
+      config:
+        - subnet: 172.19.0.0/16
 
 volumes:
   hermes-data:

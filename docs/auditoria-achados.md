@@ -20,4 +20,12 @@ Capacidade intencional de executar ferramentas/terminal não é falha de isolame
 
 Validação: `scripts/check` 12/12 ok contra base `upstream/main` (container Linux descartável); `tests/pm/` com o mesmo conjunto de falhas no fork e no `upstream/main` puro (44 testes em 16 arquivos, ambiente do container), sem falha própria do fork. Desktop: typecheck e lint limpos; testes do `reviewRevert` e da store passam e falham no código anterior. A suíte completa do desktop no Windows (sem binário Electron) teve falhas em 34 arquivos sem relação com a mudança; 30 se repetem no código anterior e as restantes passam isoladas, com e sem a correção. A CI oficial roda essa suíte em Linux.
 
-Pendências fora do escopo estático: o quesito D5 (provisionamento dos provedores no deploy) e a cobertura dinâmica continuam dependendo do ambiente real.
+## Implantação e evidência operacional (23/10/2026)
+
+O deploy real passou para a imagem oficial `nousresearch/hermes-agent:v0.22.5` (digest `sha256:9c5561579f3f…`), que já contém as versões corrigidas de #1–#3 e os pisos de segurança do fork; a camada `deploy/security/` deixou de ser necessária e foi removida, e `deploy/docker-compose.yml` passou a espelhar a imagem por digest e o endurecimento do serviço em produção. Backup cifrado do volume verificado fora do host antes da troca; estado preservado (configuração, sessões, mensagens e integridade dos bancos).
+
+**D5 — PASS com evidência operacional.** Ambiente: produção (servidor próprio), deploy na imagem acima, conferido em 23/10/2026 às 09:00 UTC, por requisições feitas de dentro do container em execução. Provedor de auth do dashboard: variáveis `HERMES_DASHBOARD_BASIC_AUTH_*` presentes no container que executa o código (só nomes conferidos); login por senha 200 e `/api/config` autenticado 200; sem sessão, `/api/config` e `/api/sessions` 401, e bearer inválido 401. API server: plataforma `api_server` conectada, o que só ocorre com chave utilizável (guarda de startup em `gateway/config_env.py::_api_server`). Status geral `ok`, com o gateway e as plataformas de mensagem conectados. Nenhum segredo foi impresso ou registrado.
+
+**#4 residual:** `braces` reconferido em 23/10/2026; 3.0.3 continua a última versão publicada e o GHSA-vfj7-8cjw-p6xm segue sem versão corrigida.
+
+Pendência: a cobertura dinâmica (teste de segurança ativo contra uma instância) não foi executada nesta rodada.
