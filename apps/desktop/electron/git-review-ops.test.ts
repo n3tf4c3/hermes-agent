@@ -13,6 +13,7 @@ import {
   REVIEW_FILE_CAP,
   reviewCreatePr,
   reviewList,
+  reviewRevert,
   simpleGitHostEnv
 } from './git-review-ops'
 import type * as NoConsoleGit from './no-console-git'
@@ -288,6 +289,56 @@ test('reviewList caps the file payload returned to the renderer', async () => {
   const result = await reviewList(dir, 'uncommitted', null, 'git')
 
   assert.equal(result.files.length, REVIEW_FILE_CAP)
+})
+
+// An edited tracked file, a staged addition and an untracked file: the three
+// shapes a discard has to undo.
+function makeDirtyRepo() {
+  const dir = makeRepo()
+
+  fs.writeFileSync(path.join(dir, 'tracked.txt'), 'edited\n')
+  fs.writeFileSync(path.join(dir, 'staged-new.txt'), 'new\n')
+  execFileSync('git', ['add', 'staged-new.txt'], { cwd: dir })
+  fs.writeFileSync(path.join(dir, 'untracked.txt'), 'scratch\n')
+
+  return dir
+}
+
+function porcelain(dir: string): string[] {
+  return execFileSync('git', ['status', '--porcelain'], { cwd: dir, encoding: 'utf8' }).split('\n').filter(Boolean)
+}
+
+test('reviewRevert of the whole tree discards edits, staged additions and untracked files', async () => {
+  const dir = makeDirtyRepo()
+
+  assert.deepEqual(await reviewRevert(dir, null, 'git'), { ok: true })
+  assert.deepEqual(porcelain(dir), [])
+})
+
+test('reviewRevert of one file discards only that file', async () => {
+  const dir = makeDirtyRepo()
+
+  await reviewRevert(dir, 'staged-new.txt', 'git')
+  assert.deepEqual(porcelain(dir), [' M tracked.txt', '?? untracked.txt'])
+
+  await reviewRevert(dir, 'untracked.txt', 'git')
+  assert.deepEqual(porcelain(dir), [' M tracked.txt'])
+
+  await reviewRevert(dir, 'tracked.txt', 'git')
+  assert.deepEqual(porcelain(dir), [])
+})
+
+test('reviewRevert rejects instead of reporting success when git cannot restore', async () => {
+  const dir = makeDirtyRepo()
+  const before = porcelain(dir)
+
+  // A stale lock left by a crashed git: every index write fails.
+  fs.writeFileSync(path.join(dir, '.git', 'index.lock'), '')
+
+  await assert.rejects(reviewRevert(dir, null, 'git'), /no changes were discarded/)
+
+  fs.rmSync(path.join(dir, '.git', 'index.lock'))
+  assert.deepEqual(porcelain(dir), before)
 })
 
 const mockExecFile = vi.mocked(await import('node:child_process')).execFile

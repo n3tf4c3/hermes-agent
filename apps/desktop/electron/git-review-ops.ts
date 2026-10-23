@@ -488,20 +488,37 @@ async function reviewUnstage(repoPath, filePath, gitBin) {
 }
 
 // Discard changes back to the committed state. Destructive — the renderer
-// confirms first. Restores tracked files and removes untracked ones.
+// confirms first. Restores tracked files (staged additions included) and removes
+// untracked ones. `git restore` rejects a pathspec git doesn't know, so it only
+// runs when something differs from HEAD. A failing step throws and stops the
+// revert; the message says whether tracked changes were already discarded, since
+// nothing rolls them back.
 async function reviewRevert(repoPath, filePath, gitBin) {
   const cwd = resolveRequestedPathForIpc(repoPath, { purpose: 'Review revert' })
   const git = gitFor(cwd, gitBin)
+  const pathspec = ['--', filePath || '.']
 
-  if (filePath) {
-    await git.raw(['checkout', 'HEAD', '--', filePath]).catch(() => undefined)
-    await git.raw(['clean', '-fd', '--', filePath]).catch(() => undefined)
-  } else {
-    await git.raw(['checkout', 'HEAD', '--', '.']).catch(() => undefined)
-    await git.raw(['clean', '-fd']).catch(() => undefined)
+  const changed = await git.raw(['diff', '--name-only', '--no-renames', 'HEAD', ...pathspec]).catch(err => {
+    throw new Error(`Discard failed before changing anything: ${gitErrorText(err)}`)
+  })
+
+  if (changed.trim()) {
+    await git.raw(['restore', '--source=HEAD', '--staged', '--worktree', ...pathspec]).catch(err => {
+      throw new Error(`Discard failed; no changes were discarded: ${gitErrorText(err)}`)
+    })
   }
 
+  await git.raw(['clean', '-fd', ...pathspec]).catch(err => {
+    const applied = changed.trim() ? 'tracked changes were discarded, but ' : ''
+
+    throw new Error(`Discard incomplete: ${applied}untracked files were not removed: ${gitErrorText(err)}`)
+  })
+
   return { ok: true }
+}
+
+function gitErrorText(err) {
+  return String(err?.message || err).trim()
 }
 
 // Resolve a ref to a commit sha (captures the turn baseline for "Last turn").

@@ -479,6 +479,19 @@ describe('mutations', () => {
     expect(review.stage).toHaveBeenCalledWith('/repo', 'a.ts')
     expect(review.list).toHaveBeenCalled()
   })
+
+  it('revertReviewFile surfaces a failed discard and still re-syncs the partial tree', async () => {
+    const review = stubReview({
+      revert: vi.fn(async () => {
+        throw new Error('Discard incomplete')
+      })
+    })
+
+    $reviewOpen.set(true)
+
+    await expect(revertReviewFile('a.ts')).rejects.toThrow('Discard incomplete')
+    expect(review.list).toHaveBeenCalled()
+  })
 })
 
 describe('revert confirm dialog', () => {
