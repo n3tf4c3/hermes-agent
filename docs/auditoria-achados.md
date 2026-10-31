@@ -29,3 +29,30 @@ O deploy real passou para a imagem oficial `nousresearch/hermes-agent:v0.22.5` (
 **#4 residual:** `braces` reconferido em 23/10/2026; 3.0.3 continua a última versão publicada e o GHSA-vfj7-8cjw-p6xm segue sem versão corrigida.
 
 Pendência: a cobertura dinâmica (teste de segurança ativo contra uma instância) não foi executada nesta rodada.
+
+
+## Rodada transversal 2026-10-30 — 200000
+
+HEAD auditado: `01493e69a38830433a2675947abb578ecf1c2673`. Relatório externo: `C:\Codes\relatorios\hermes-agent\auditoria-2026-10-30-200000.md`. Evidências: `C:\Codes\relatorios\hermes-agent\evidencias-2026-10-30-200000.json`.
+
+Auditoria estática e validações selecionadas; sem correção de código, commit, push ou deploy. Falta de prova operacional não foi convertida em vulnerabilidade presumida.
+
+| ID | Achado | Severidade | Status nesta rodada | Evidência |
+|---|---|---|---|---|
+| 6 | Decoder Brotli vulnerável pode processar mídia externa | alta | ABERTO | `pyproject.toml:274`; `uv.lock:650`; `gateway/platforms/base.py:524`; `gateway/platforms/base.py:635`; Potencial — versão e caminho confirmados; seleção do codec e exploração não reproduzidas. |
+| 4 | Advisories atuais permanecem em extras e bridges | média | PARCIAL | `uv.lock:1781`; `uv.lock:3586`; `pyproject.toml:482`; `pyproject.toml:613`; `package-lock.json:19014`; `scripts/whatsapp-bridge/package-lock.json:881`; Versões com advisory confirmadas; alcance de cada função parcialmente verificado. |
+| 7 | Ações de dashboard com cookie não validam CSRF/origem | média | ABERTO | `hermes_cli/dashboard_auth/cookies.py:59`; `hermes_cli/dashboard_auth/middleware.py:160`; `hermes_cli/web_routers/actions.py:160`; `hermes_cli/web_server.py:557`; Potencial — inspeção estática, sem exploração. |
+
+Reverificações e decisões históricas: #1 — Correção Pillow preservada; #2 — Correção certifi preservada; #3 — Constraint aiohttp corrigida preservada; #4 — REABERTO/PARCIAL para advisories atuais; #5 — Correção do revert desktop presente. O relatório detalha alcance/evidência; provas operacionais antigas não foram repetidas.
+
+## Resolução de 31/10/2026
+
+Commits na branch `fix/auditoria-20261031` (base `01493e69a3`): `6db2779b61` (#6 e #4 Python), `d33189fae2` (#4 JS), `64416f43b8` (#7). Sem push nem deploy. Detalhes, decisões e falsificação no adendo do relatório da rodada.
+
+| ID | Status | Resolução | Pendência / condição de fechamento |
+|---|---|---|---|
+| #6 | PARCIAL (31/10/2026) | `brotlicffi==1.2.1.0` no extra `messaging` e no `uv.lock`, alinhado ao upstream (#145147). Smoke Brotli benigno pelo leitor real do gateway: o httpx seleciona brotlicffi e envia `br`, o que confirma a cadeia | Produção na imagem oficial `v0.22.5` ainda tem 1.2.0.2. Fecha com deploy de imagem com ≥1.2.1.0 (sem release estável do upstream até 31/10) |
+| #4 | PARCIAL (31/10/2026) | Python: pyasn1 0.6.5, tornado 6.6, msgpack 1.2.3, filelock 4.2.1, setuptools 84.1.0. JS: undici 6.29.1/7.30.1, zod 4.6.7 (raiz e Photon), fast-uri 3.1.9, body-parser 1.20.9 (bridge WhatsApp). Locks regenerados com uv 0.13.5 e npm 12.0.2 (versões do PM) | follow-redirects 1.16.2 e joi 18.3.1 (só via `wait-on`, dev) bloqueados pelo `min-release-age=14`; reabrir em 08/11 e 11/11. qs 6.16.0 no bridge não alcançável (sem `stringify` com `arrayFormat: 'comma'`). Tooling moderado sem correção não major. `braces` do website como antes |
+| #7 | PARCIAL (31/10/2026) | `gated_auth_middleware` recusa (403) escrita com cookie quando `Sec-Fetch-Site` não é `same-origin`/`none`; sem o header, mantém o comportamento (compatível com proxy HTTP, motivo da reversão `22103f58a8` no upstream). Teste vermelho no código anterior | Sem defesa em HTTP comum fora do loopback (navegador não envia Fetch Metadata). Produção (imagem oficial) sem a correção |
+
+Validação (contêineres Linux descartáveis): `scripts/check` 12/12; `--check-lock` ok; `tests/hermes_cli`, `tests/gateway` e `tests/plugins` com os extras afetados: 30901 testes passando e 158 falhando, com 157 iguais no HEAD original (lock e ambiente do HEAD) e 1 de carga que passa isolado nas duas árvores. TUI 1880 testes passando com o undici novo; `npm ci` ok nos três locks.
