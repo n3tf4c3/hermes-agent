@@ -69,6 +69,22 @@ def _safe_next_target(request: Request) -> str:
     return quote(f"{path}?{query}" if query else path, safe="")
 
 
+_SAFE_METHODS = frozenset({"GET", "HEAD", "OPTIONS", "TRACE"})
+#: ``Sec-Fetch-Site`` values a cookie write may carry. ``SameSite=Lax`` still sends the session
+#: cookie from same-site siblings (another port on the same host, another subdomain); the
+#: browser labels those ``same-site`` and pages cannot forge the header. Without the header
+#: (plain-HTTP origin behind a proxy, non-browser client) the write passes as before: comparing
+#: Origin with this server's own URL breaks behind a Host-rewriting proxy.
+_COOKIE_WRITE_FETCH_SITES = frozenset({"same-origin", "none"})
+
+
+def _cookie_write_from_other_site(request: Request) -> bool:
+    if request.method in _SAFE_METHODS:
+        return False
+    site = request.headers.get("sec-fetch-site")
+    return site is not None and site.strip().lower() not in _COOKIE_WRITE_FETCH_SITES
+
+
 def _unauth_response(request: Request, *, reason: str) -> Response:
     """API routes -> 401 JSON with ``login_url``; HTML routes -> 302 -> /login. fetch() follows a
     302 opaquely into the cross-origin OAuth dance, so API routes never get redirects; the SPA's
@@ -185,6 +201,12 @@ async def gated_auth_middleware(
 
     at, _rt = read_session_cookies(request)
     provider_hint = read_session_provider(request)
+    if (at or _rt) and _cookie_write_from_other_site(request):
+        audit_log(AuditEvent.SESSION_REJECTED, reason="cross_site_cookie_write",
+                  path=request.url.path, ip=_client_ip(request))
+        return JSONResponse(status_code=403,
+                            content={"detail": "Cookie-authenticated writes must come from the "
+                                               "dashboard's own origin."})
     if not at and not _rt:
         # No session at all: try the silent portal bounce before /login.
         auto = _auto_sso_response(request)

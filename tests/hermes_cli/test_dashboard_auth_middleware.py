@@ -220,6 +220,37 @@ def test_gated_require_token_endpoint_accepts_cookie_session(gated_app):
     )
 
 
+@pytest.mark.parametrize(
+    ("headers", "expected"),
+    [
+        ({"Sec-Fetch-Site": "same-site"}, 403),
+        ({"Sec-Fetch-Site": "cross-site"}, 403),
+        ({"Sec-Fetch-Site": "same-origin"}, 400),
+        ({"Sec-Fetch-Site": "none"}, 400),
+        # No Fetch Metadata (plain-HTTP origin behind a proxy, non-browser client): as before.
+        ({}, 400),
+    ],
+)
+def test_cookie_write_from_same_site_sibling_is_refused(gated_app, headers, expected):
+    """``SameSite=Lax`` still sends the session cookie from another port or subdomain of the
+    same site; the browser labels that write ``same-site``, and the gate must refuse it before
+    the handler runs. Own-origin writes still reach the handler (its 400 for a bad identifier)."""
+    _complete_stub_login(gated_app)
+    r = gated_app.post(
+        "/api/dashboard/agent-plugins/install",
+        json={"identifier": "definitely not a valid identifier",
+              "force": False, "enable": False},
+        headers=headers,
+    )
+    assert r.status_code == expected, r.text
+
+
+def test_cookie_read_from_same_site_sibling_still_passes(gated_app):
+    _complete_stub_login(gated_app)
+    r = gated_app.get("/api/auth/me", headers={"Sec-Fetch-Site": "same-site"})
+    assert r.status_code == 200, r.text
+
+
 # A representative spread of the OTHER ``_require_token`` endpoints (there are
 # 14 in total). The install popup was just the reported symptom; the same bug
 # made API-key reveal, provider validation, the OAuth-provider connect flow,
