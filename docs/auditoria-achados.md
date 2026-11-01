@@ -41,7 +41,7 @@ Auditoria estática e validações selecionadas; sem correção de código, comm
 |---|---|---|---|---|
 | 6 | Decoder Brotli vulnerável pode processar mídia externa | alta | ABERTO | `pyproject.toml:274`; `uv.lock:650`; `gateway/platforms/base.py:524`; `gateway/platforms/base.py:635`; Potencial — versão e caminho confirmados; seleção do codec e exploração não reproduzidas. |
 | 4 | Advisories atuais permanecem em extras e bridges | média | PARCIAL | `uv.lock:1781`; `uv.lock:3586`; `pyproject.toml:482`; `pyproject.toml:613`; `package-lock.json:19014`; `scripts/whatsapp-bridge/package-lock.json:881`; Versões com advisory confirmadas; alcance de cada função parcialmente verificado. |
-| 7 | Ações de dashboard com cookie não validam CSRF/origem | média | ABERTO | `hermes_cli/dashboard_auth/cookies.py:59`; `hermes_cli/dashboard_auth/middleware.py:160`; `hermes_cli/web_routers/actions.py:160`; `hermes_cli/web_server.py:557`; Potencial — inspeção estática, sem exploração. |
+| 7 | Ações de dashboard com cookie não validam CSRF/origem | média | RESOLVIDO | `hermes_cli/dashboard_auth/cookies.py:59`; `hermes_cli/dashboard_auth/middleware.py:160`; `hermes_cli/web_routers/actions.py:160`; `hermes_cli/web_server.py:557`; Potencial — inspeção estática, sem exploração. |
 
 Reverificações e decisões históricas: #1 — Correção Pillow preservada; #2 — Correção certifi preservada; #3 — Constraint aiohttp corrigida preservada; #4 — REABERTO/PARCIAL para advisories atuais; #5 — Correção do revert desktop presente. O relatório detalha alcance/evidência; provas operacionais antigas não foram repetidas.
 
@@ -53,7 +53,7 @@ Commits na branch `fix/auditoria-20261031` (base `01493e69a3`): `6db2779b61` (#6
 |---|---|---|---|
 | #6 | RESOLVIDO (31/10/2026) | `brotlicffi==1.2.1.0` no extra `messaging` e no `uv.lock`, alinhado ao upstream (#145147). Smoke Brotli benigno pelo leitor real do gateway: o httpx seleciona brotlicffi e envia `br`, o que confirma a cadeia | Produção com 1.2.1.0 desde 31/10 pela camada `deploy/security/` (ver implantação abaixo). Retirar a camada quando uma estável oficial trouxer ≥1.2.1.0 |
 | #4 | PARCIAL (31/10/2026) | Python: pyasn1 0.6.5, tornado 6.6, msgpack 1.2.3, filelock 4.2.1, setuptools 84.1.0. JS: undici 6.29.1/7.30.1, zod 4.6.7 (raiz e Photon), fast-uri 3.1.9, body-parser 1.20.9 (bridge WhatsApp). Locks regenerados com uv 0.13.5 e npm 12.0.2 (versões do PM) | follow-redirects 1.16.2 e joi 18.3.1 (só via `wait-on`, dev) bloqueados pelo `min-release-age=14`; reabrir em 08/11 e 11/11. Produção: pyasn1, tornado e Photon corrigidos pela camada; bridge WhatsApp não instalado no volume. qs 6.16.0 no bridge não alcançável (sem `stringify` com `arrayFormat: 'comma'`). Tooling moderado sem correção não major. `braces` do website como antes |
-| #7 | PARCIAL (31/10/2026) | `gated_auth_middleware` recusa (403) escrita com cookie quando `Sec-Fetch-Site` não é `same-origin`/`none`; sem o header, mantém o comportamento (compatível com proxy HTTP, motivo da reversão `22103f58a8` no upstream). Teste vermelho no código anterior | Sem defesa em HTTP comum fora do loopback (navegador não envia Fetch Metadata). Produção (imagem oficial) sem a correção |
+| #7 | RESOLVIDO (01/11/2026; PARCIAL em 31/10) | `gated_auth_middleware` recusa (403) escrita com cookie quando `Sec-Fetch-Site` não é `same-origin`/`none`; sem o header, mantém o comportamento (compatível com proxy HTTP, motivo da reversão `22103f58a8` no upstream). Teste vermelho no código anterior | Sem defesa em HTTP comum fora do loopback (navegador não envia Fetch Metadata). Em produção desde 01/11 pela camada `0.22.5-security-20261101` (ver seção de 01/11) |
 
 Validação (contêineres Linux descartáveis): `scripts/check` 12/12; `--check-lock` ok; `tests/hermes_cli`, `tests/gateway` e `tests/plugins` com os extras afetados: 30901 testes passando e 158 falhando, com 157 iguais no HEAD original (lock e ambiente do HEAD) e 1 de carga que passa isolado nas duas árvores. TUI 1880 testes passando com o undici novo; `npm ci` ok nos três locks.
 
@@ -84,3 +84,16 @@ Status continua **PARCIAL**. O fork já recusa a escrita com cookie vinda de out
 - Sem mudança de código nesta rodada. A tentativa de rodar `scripts/run_tests.sh` sem bootstrap preparou um `HERMES_HOME` e ferramentas fora do repositório (`%LOCALAPPDATA%\hermes`, `~/.hermes`, 1,8 GB) e parou em "no bootstrap Python found". As três pastas foram criadas por essa execução e removidas em seguida. Para rodar a suíte sem gravar fora de `C:\Codes`, usar contêiner ou o ambiente descartável da rodada anterior.
 
 **#7, estado do upstream em 01/11/2026:** a `main` do upstream ganhou em 22–25/10 a checagem de origem para escritas com cookie (`cookie_origin_is_allowed`), mas só no listener Webapp do gateway (`own_origin_cookie_writes=True`). O `hermes dashboard`, que é a superfície publicada em `127.0.0.1:9119` aqui, ficou de propósito com a regra antiga (`False`), porque o fallback Origin-vs-Host quebrava proxy HTTP sem Fetch Metadata. A v0.22.5 (23/10) é anterior. Não está corrigido para esta implantação; o rascunho do reporte foi atualizado com isso.
+
+## #7 — correção em produção e reporte ao upstream (01/11/2026)
+
+Status **RESOLVIDO** na implantação atual. Reabrir se o dashboard for publicado em HTTP comum fora do loopback, onde o navegador não envia Fetch Metadata.
+
+- **Camada:** `deploy/security/apply_source_fixes.py` troca `hermes_cli/dashboard_auth/middleware.py` pela cópia do fork (`64416f43b8`). Só troca se o arquivo da imagem tiver o sha256 da v0.22.5 e a cópia o da correção revisada; senão o build falha. Commit `3832f88de1`; tag `hermes-agent:0.22.5-security-20261101`.
+- **Prova (contêiner descartável, sem rede, auth_required, login por senha, POST com cookie numa rota de escrita inexistente):**
+  - v0.22.5 e camada de 31/10: `same-site` e `cross-site` passam pelo gate (405 da rota);
+  - camada de 01/11: 403;
+  - `same-origin`, sem o header e leitura iguais nas duas;
+  - cópia adulterada do middleware faz o build falhar.
+- **Produção (Orange Pi, 01/11 ~12:20Z):** build arm64 no Pi (47 s, cache), mesma prova na candidata, troca só da linha `image:` do compose, parada de 13 s, 0 restarts. Pós: `overall ok`, 3/3 plataformas, login 200, 401 sem sessão e com bearer inválido, `same-site`/`cross-site` 403, porta só em `127.0.0.1:9119`, endurecimento igual. Comprovantes em `/srv/containers/hermes/security-20261101/receipts/`. Rollback: `compose.yml.bak-<TS>-hermes-security-20261101` e volume `hermes-rollback-<TS>`.
+- **Upstream:** reporte privado enviado em 01/11 pelo GitHub Security Advisory (`GHSA-4w4r-jmvh-vcv9`, estado triage). Texto em `C:Codeselatorioshermes-agenteporte-upstream-achado-7-final.md`. Quando uma estável trouxer a correção (ou equivalente), retirar `apply_source_fixes.py` junto com a camada.
