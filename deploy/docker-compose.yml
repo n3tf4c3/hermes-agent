@@ -30,7 +30,7 @@ name: hermes
 
 services:
   hermes:
-    image: hermes-agent:0.22.5-security-20261031
+    image: hermes-agent:0.22.5-security-20261101
     build:
       context: ..
       dockerfile: deploy/security/Dockerfile

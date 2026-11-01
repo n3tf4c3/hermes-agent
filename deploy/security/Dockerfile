@@ -1,13 +1,14 @@
-# Security layer over the official v0.22.5 image; application source stays at the release.
+# Security layer over the official v0.22.5 image; application source stays at the release
+# except for the fork's fix for audit finding #7 (dashboard cookie writes from same-site siblings).
 # Rebuilds the Python environment from this fork's lock (brotlicffi 1.2.1.0, pyasn1 0.6.5,
 # tornado 6.6) and the Photon sidecar's node_modules (undici 7.30.1, zod 4.6.7).
-# Retire it when an official stable release ships these versions.
+# Retire it when an official stable release ships these versions and the fix.
 #
 # Build from the repository root, on the host that runs it (arm64 on the server):
-#   docker build -f deploy/security/Dockerfile -t hermes-agent:0.22.5-security-20261031 .
+#   docker build -f deploy/security/Dockerfile -t hermes-agent:0.22.5-security-20261101 .
 FROM nousresearch/hermes-agent:v0.22.5@sha256:9c5561579f3ffdf333401797094ac3a743738d6c25d40f4331c7bf77b694238d
 
-LABEL org.opencontainers.image.version="0.22.5-security.20261031" \
+LABEL org.opencontainers.image.version="0.22.5-security.20261101" \
       org.opencontainers.image.base.name="nousresearch/hermes-agent:v0.22.5" \
       org.opencontainers.image.base.digest="sha256:9c5561579f3ffdf333401797094ac3a743738d6c25d40f4331c7bf77b694238d"
 
@@ -22,3 +23,9 @@ RUN cd /opt/hermes/plugins/platforms/photon/sidecar && \
     rm -rf node_modules && \
     npm ci --no-audit --fetch-retries=5 && \
     npm cache clean --force
+
+# Source fixes not yet in a stable release; refuses to build over anything but the v0.22.5 bytes.
+COPY hermes_cli/dashboard_auth/middleware.py /tmp/hermes-security-sources/hermes_cli/dashboard_auth/
+COPY deploy/security/apply_source_fixes.py /tmp/hermes-security-fix.py
+RUN /usr/local/bin/python3 /tmp/hermes-security-fix.py && \
+    rm -rf /tmp/hermes-security-fix.py /tmp/hermes-security-sources
