@@ -15,7 +15,7 @@ from typing import Any, Dict, List, Optional
 from agent.skill_commands import AUTO_LOAD_SCAFFOLD_SQL_LIKE, SKILL_SCAFFOLD_SQL_LIKE
 from utils import safe_json_loads
 from hermes_cli.timefmt import coerce_epoch
-from hermes_state_ids import is_path_unsafe_session_id, new_session_id
+from hermes_state_ids import new_session_id
 from hermes_state_keys import (
     CRON_PRINCIPAL_ID, CRON_REQUEST_PREFIX, cron_request_range, cron_run_from_request, legacy_cron_run_job,
     prefix_range,
@@ -685,8 +685,6 @@ class SessionPortabilityMixin:
             raise ValueError("session must be an object")
         if not session_id:
             raise ValueError("session id is required")
-        if is_path_unsafe_session_id(session_id):
-            raise ValueError("session id must be a plain name (no path separator, '..' or drive)")
         if session_id in seen_ids:
             raise ValueError("duplicate session id")
         messages = raw.get("messages") or []

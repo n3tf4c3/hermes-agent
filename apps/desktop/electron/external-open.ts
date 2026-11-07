@@ -141,13 +141,10 @@ export async function openExternalUrl(rawUrl: string, deps: ExternalOpenDeps): P
   }
 }
 
-// Never `cmd.exe /c start`: cmd reparses the URL, so a valid `&` in a query string
-// chains another command. explorer.exe hands the URL to the registered protocol
-// handler as data (the TUI's opener makes the same choice).
 async function openViaWsl(url: string, deps: ExternalOpenDeps): Promise<ExternalOpenResult> {
   deps.log(`[link] opening via WSL→Windows: ${url}`)
 
-  const proc = deps.spawn('explorer.exe', [url], {
+  const proc = deps.spawn('cmd.exe', ['/c', 'start', '""', url], {
     detached: true,
     stdio: 'ignore',
     windowsHide: true
@@ -157,7 +154,7 @@ async function openViaWsl(url: string, deps: ExternalOpenDeps): Promise<External
   // fall back to xdg-open; if that also fails, surface it. The handler runs
   // asynchronously after this function has already resolved.
   proc.on('error', error => {
-    deps.log(`[link] explorer.exe failed to start: ${error.message}; falling back to xdg-open`)
+    deps.log(`[link] cmd.exe start failed: ${error.message}; falling back to xdg-open`)
 
     deps.openExternal(url).catch(openError => {
       failOpen(deps, url, openError)

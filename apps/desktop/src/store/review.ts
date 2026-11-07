@@ -531,12 +531,8 @@ export async function revertReviewFile(path: null | string): Promise<void> {
     return
   }
 
-  // A failed revert may already have changed part of the tree; re-sync either way.
-  try {
-    await desktopGit()?.review?.revert(repoCwd() ?? '', path)
-  } finally {
-    await afterMutation()
-  }
+  await desktopGit()?.review?.revert(repoCwd() ?? '', path)
+  await afterMutation()
 }
 
 // Revert is destructive (discards working-tree edits with no undo), so it always

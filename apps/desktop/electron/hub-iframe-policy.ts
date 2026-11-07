@@ -53,29 +53,3 @@ export function isHermesHubExternalUrl(url: string): boolean {
 export function isHermesHubClipboardWrite(origin: string | null | undefined): boolean {
   return isHermesHubOrigin(origin)
 }
-
-/**
- * Origin of the frame a permission request came from. Both session handlers get the webContents
- * of the TOP document (Chromium routes subframe requests through it without exposing the frame),
- * so the request's own `requestingUrl` decides whenever the handler passes its details; its
- * origin is exact for both hub deployments and `null` for anything sandboxed or opaque. Without
- * details only the top document can be judged, which is never the embedded hub.
- */
-export function focusedFrameOrigin(
-  webContents: { getURL?: () => string } | null | undefined,
-  details?: { requestingUrl?: string }
-): string | null {
-  try {
-    if (details?.requestingUrl) {
-      return new URL(details.requestingUrl).origin
-    }
-
-    if (webContents?.getURL) {
-      return new URL(webContents.getURL()).origin
-    }
-  } catch {
-    // Unparseable URL — report no origin; callers deny.
-  }
-
-  return null
-}

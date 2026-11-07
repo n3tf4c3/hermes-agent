@@ -251,9 +251,7 @@ async def gated_auth_middleware(
         if not webapp_sign_in.token_works_alone(request, bearer):
             return _unauth_response(request, reason="invalid_or_expired_session")
         try:
-            # Off the event loop: a cold or unknown-kid JWKS lookup is a blocking HTTP fetch.
-            bearer_session = await run_in_threadpool(
-                _verify_access_token, request, access_token=bearer, audit=False)
+            bearer_session = _verify_access_token(request, access_token=bearer, audit=False)
         except ProviderError as e:
             return unreachable_response(str(e))
         if bearer_session is not None:
@@ -286,8 +284,7 @@ async def gated_auth_middleware(
     session = None
     if at:
         try:
-            session = await run_in_threadpool(
-                _verify_access_token, request, access_token=at, provider_hint=provider_hint)
+            session = _verify_access_token(request, access_token=at, provider_hint=provider_hint)
         except ProviderError as e:
             return unreachable_response(str(e))
     if session is None:

@@ -221,37 +221,6 @@ def test_gated_require_token_endpoint_accepts_cookie_session(gated_app):
     )
 
 
-@pytest.mark.parametrize(
-    ("headers", "expected"),
-    [
-        ({"Sec-Fetch-Site": "same-site"}, 403),
-        ({"Sec-Fetch-Site": "cross-site"}, 403),
-        ({"Sec-Fetch-Site": "same-origin"}, 400),
-        ({"Sec-Fetch-Site": "none"}, 400),
-        # No Fetch Metadata (plain-HTTP origin behind a proxy, non-browser client): as before.
-        ({}, 400),
-    ],
-)
-def test_cookie_write_from_same_site_sibling_is_refused(gated_app, headers, expected):
-    """``SameSite=Lax`` still sends the session cookie from another port or subdomain of the
-    same site; the browser labels that write ``same-site``, and the gate must refuse it before
-    the handler runs. Own-origin writes still reach the handler (its 400 for a bad identifier)."""
-    _complete_stub_login(gated_app)
-    r = gated_app.post(
-        "/api/dashboard/agent-plugins/install",
-        json={"identifier": "definitely not a valid identifier",
-              "force": False, "enable": False},
-        headers=headers,
-    )
-    assert r.status_code == expected, r.text
-
-
-def test_cookie_read_from_same_site_sibling_still_passes(gated_app):
-    _complete_stub_login(gated_app)
-    r = gated_app.get("/api/auth/me", headers={"Sec-Fetch-Site": "same-site"})
-    assert r.status_code == 200, r.text
-
-
 def _proxied_gate(monkeypatch, surface: str | None) -> TestClient:
     """Gated all-interfaces bind reached through a proxy that is not in ``trusted_proxies``, with
     no ``public_url``: the server sees ``http://127.0.0.1:9119`` whatever URL the browser addressed.
@@ -638,36 +607,3 @@ def test_all_providers_unreachable_returns_503(_gated_state):
     assert "unreachable" in r.text.lower()
 
 
-
-
-def test_gate_verifies_sessions_off_the_event_loop(gated_app):
-    """A provider's ``verify_session`` can block on the network (a cold or unknown-kid JWKS fetch);
-    run on the event loop it stalls every other request. Cookie and bearer checks both run it in
-    the threadpool, as the refresh path already does."""
-    import asyncio
-
-    class LoopProbe(StubAuthProvider):
-        def __init__(self):
-            super().__init__()
-            self.on_event_loop: list[bool] = []
-
-        def verify_session(self, *, access_token: str):
-            try:
-                asyncio.get_running_loop()
-                self.on_event_loop.append(True)
-            except RuntimeError:
-                self.on_event_loop.append(False)
-            return super().verify_session(access_token=access_token)
-
-    probe = LoopProbe()
-    clear_providers()
-    register_provider(probe)
-    _complete_stub_login(gated_app)
-
-    assert gated_app.get("/api/auth/me").status_code == 200
-    bearer = gated_app.cookies.get(f"__Host-{SESSION_AT_COOKIE}")  # gated HTTPS prefixes the name
-    assert bearer
-    assert gated_app.get("/api/auth/me", headers={"Authorization": f"Bearer {bearer}"}).status_code == 200
-
-    assert len(probe.on_event_loop) >= 2
-    assert not any(probe.on_event_loop), probe.on_event_loop

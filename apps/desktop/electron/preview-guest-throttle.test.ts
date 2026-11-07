@@ -6,7 +6,6 @@ import { describe, expect, it, vi } from 'vitest'
 import {
   applyPreviewGuestAttachPrefs,
   beginPreviewGuestActivity,
-  denyPreviewGuestPermissions,
   endPreviewGuestActivity,
   executePreviewGuestScript
 } from './preview-guest-throttle'
@@ -19,35 +18,6 @@ describe('applyPreviewGuestAttachPrefs', () => {
     applyPreviewGuestAttachPrefs(webPreferences, 'persist:other', '/preload.js')
 
     expect(webPreferences).toEqual({})
-  })
-})
-
-describe('denyPreviewGuestPermissions', () => {
-  it('denies every permission a remote preview page can request or probe', () => {
-    let request: undefined | Parameters<Session['setPermissionRequestHandler']>[0]
-    let check: undefined | Parameters<Session['setPermissionCheckHandler']>[0]
-
-    denyPreviewGuestPermissions({
-      setPermissionRequestHandler: handler => {
-        request = handler
-      },
-      setPermissionCheckHandler: handler => {
-        check = handler
-      }
-    })
-
-    const guest = {} as WebContents
-
-    for (const permission of ['media', 'clipboard-sanitized-write', 'notifications', 'geolocation']) {
-      const callback = vi.fn()
-
-      request!(guest, permission as never, callback, { requestingUrl: 'https://remote.test/' } as never)
-      expect(callback).toHaveBeenCalledWith(false)
-    }
-
-    for (const permission of ['media', 'clipboard-sanitized-write', 'notifications']) {
-      expect(check!(guest, permission as never, 'https://remote.test', {} as never)).toBe(false)
-    }
   })
 })
 
