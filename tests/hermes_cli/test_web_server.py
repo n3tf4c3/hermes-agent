@@ -976,73 +976,72 @@ CONFIG_SCHEMA = ProviderConfigSchema(
             resp = self.client.get("/api/media/proxy", params={"url": bad})
             assert resp.status_code == expected_status, (bad, resp.status_code)
 
-    def test_media_proxy_fetches_allowlisted_image_and_returns_data_url(self, monkeypatch):
-        png_bytes = b"\x89PNG\r\n\x1a\n" + b"0" * 8
-
-        class _Resp:
-            status_code = 200
-            headers = {"content-type": "image/png"}
-            content = png_bytes
-
-        class _Client:
-            def __init__(self, *a, **k):
-                pass
-
-            async def __aenter__(self):
-                return self
-
-            async def __aexit__(self, *a):
-                return False
-
-            async def get(self, url):
-                assert url == "https://v3.fal.media/media/abc123"
-                return _Resp()
+    def _route_media_proxy(self, monkeypatch, handler):
+        """Serve the proxy's upstream fetch from *handler* through httpx's real client."""
+        import httpx
 
         import hermes_cli.web_routers.files as files_router
 
         monkeypatch.setattr(files_router, "_require_token", lambda request: None, raising=False)
+        real_client = httpx.AsyncClient
         # The route imports httpx locally; patch the module it resolves from.
+        monkeypatch.setattr(httpx, "AsyncClient",
+                            lambda *a, **k: real_client(*a, transport=httpx.MockTransport(handler), **k))
+
+    def test_media_proxy_fetches_allowlisted_image_and_returns_data_url(self, monkeypatch):
+        import base64
+
         import httpx
 
-        monkeypatch.setattr(httpx, "AsyncClient", _Client, raising=False)
+        png_bytes = b"\x89PNG\r\n\x1a\n" + b"0" * 8
+
+        def handler(request):
+            assert str(request.url) == "https://v3.fal.media/media/abc123"
+            return httpx.Response(200, headers={"content-type": "image/png"}, content=png_bytes)
+
+        self._route_media_proxy(monkeypatch, handler)
 
         resp = self.client.get(
             "/api/media/proxy", params={"url": "https://v3.fal.media/media/abc123"}
         )
         assert resp.status_code == 200
-        import base64
-
         assert resp.json()["data_url"] == (
             "data:image/png;base64," + base64.b64encode(png_bytes).decode("ascii")
         )
 
     def test_media_proxy_rejects_non_image_content_type(self, monkeypatch):
-        class _Resp:
-            status_code = 200
-            headers = {"content-type": "text/html"}
-            content = b"<html>nope</html>"
-
-        class _Client:
-            def __init__(self, *a, **k):
-                pass
-
-            async def __aenter__(self):
-                return self
-
-            async def __aexit__(self, *a):
-                return False
-
-            async def get(self, url):
-                return _Resp()
-
         import httpx
 
-        monkeypatch.setattr(httpx, "AsyncClient", _Client, raising=False)
+        self._route_media_proxy(monkeypatch, lambda request: httpx.Response(
+            200, headers={"content-type": "text/html"}, content=b"<html>nope</html>"))
 
         resp = self.client.get(
             "/api/media/proxy", params={"url": "https://fal.media/media/abc123"}
         )
         assert resp.status_code == 415
+
+    def test_media_proxy_stops_downloading_once_the_size_cap_is_passed(self, monkeypatch):
+        import httpx
+
+        import hermes_cli.web_routers.files as files_router
+
+        monkeypatch.setattr(files_router, "_MEDIA_MAX_BYTES", 1024)
+        served = []
+
+        async def body():
+            for _ in range(8):
+                served.append(512)
+                yield b"0" * 512
+
+        self._route_media_proxy(monkeypatch, lambda request: httpx.Response(
+            200, headers={"content-type": "image/png"}, content=body()))
+
+        resp = self.client.get(
+            "/api/media/proxy", params={"url": "https://fal.media/media/abc123"}
+        )
+        assert resp.status_code == 413
+        # The third chunk crosses 1024 bytes; nothing after it is pulled from upstream.
+        assert sum(served) <= 1024 + 512, served
 
     # ── POST /api/chat/image-upload (browser clipboard/drop images) ─────
 
