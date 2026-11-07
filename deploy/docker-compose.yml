@@ -1,10 +1,9 @@
 #
 # Hermes Agent — serviço único em Docker
 #
-# Espelha o serviço `hermes` do compose canônico do servidor: a camada de
-# segurança de deploy/security/ sobre a imagem oficial v0.22.5 (fixada por
-# digest no Dockerfile dela) e o endurecimento usado em produção. Funciona em
-# Docker Desktop ou num host Linux; a camada é construída no próprio host.
+# Espelha o serviço `hermes` do compose canônico do servidor: imagem oficial
+# fixada por digest (manifest list, serve amd64 e arm64) e o endurecimento
+# usado em produção. Funciona em Docker Desktop ou num host Linux.
 #
 # Um único container: o s6-overlay dentro da imagem supervisiona o gateway
 # e o dashboard. NÃO separar o dashboard em outro container — ele precisa
@@ -12,14 +11,11 @@
 # de dados corrompem sessions/memory.
 #
 # Uso:
-#   docker compose build
 #   docker compose up -d
 #   docker compose logs -f
 #
-# Atualizar: backup do volume, fixar a tag nova no Dockerfile da camada (ou,
-# quando uma estável oficial trouxer as correções, voltar a `image:` oficial
-# por digest e remover `build:`), `docker compose config -q` e
-# `up -d --dry-run`, depois `up -d`.
+# Atualizar: backup do volume, `docker pull` da tag nova, fixar o digest
+# abaixo, `docker compose config -q` e `up -d --dry-run`, depois `up -d`.
 #
 # Segredos (chave de LLM, token do Telegram) NÃO ficam aqui: eles vivem em
 # /opt/data/.env dentro do volume, escritos pelo wizard `hermes setup`.
@@ -30,10 +26,7 @@ name: hermes
 
 services:
   hermes:
-    image: hermes-agent:0.22.5-security-20261101
-    build:
-      context: ..
-      dockerfile: deploy/security/Dockerfile
+    image: nousresearch/hermes-agent:v0.23.0@sha256:adb7890916de63245523492be8f68f9d2095fecbec4e2a6dab7960381f0fc002
     container_name: hermes
     restart: unless-stopped
     command: ["gateway", "run"]
