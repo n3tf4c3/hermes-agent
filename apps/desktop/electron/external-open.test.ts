@@ -165,27 +165,29 @@ test('opens protocol-relative URLs as https, never as local paths', async () => 
   assert.equal(calls.localOpened.length, 0)
 })
 
-test('wsl: spawns cmd.exe and resolves ok on the happy path', async () => {
-  const spawned: string[] = []
+test('wsl: hands the URL to explorer.exe as its only argument, never to a command interpreter', async () => {
+  const spawned: Array<[string, readonly string[]]> = []
   const proc = new EventEmitter() as unknown as ChildProcess
 
   const { deps } = makeDeps({
     isWsl: true,
     spawn: (cmd, args) => {
-      spawned.push(cmd, ...args)
+      spawned.push([cmd, args])
 
       return proc
     }
   })
 
-  const result = await openExternalUrl('https://example.com', deps)
+  // '&' (and '|', '^') are legal in a URL and are command separators for cmd.exe.
+  const url = 'https://example.com/search?q=a&calc.exe|x^y'
+  const result = await openExternalUrl(url, deps)
 
   assert.deepEqual(result, { ok: true })
-  assert.equal(spawned[0], 'cmd.exe')
-  assert.ok(spawned.some(arg => arg === 'https://example.com/'))
+  assert.equal(spawned.length, 1)
+  assert.deepEqual(spawned[0], ['explorer.exe', [new URL(url).href]])
 })
 
-test('wsl: falls back to openExternal and notifies when cmd.exe fails to spawn', async () => {
+test('wsl: falls back to openExternal and notifies when explorer.exe fails to spawn', async () => {
   const proc = new EventEmitter() as unknown as ChildProcess
   const { deps, calls } = makeDeps({ isWsl: true, spawn: () => proc })
 
