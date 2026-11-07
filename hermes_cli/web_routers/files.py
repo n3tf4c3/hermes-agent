@@ -506,10 +506,8 @@ async def proxy_remote_media(url: str, request: Request):
                     data += chunk
                     if len(data) > _MEDIA_MAX_BYTES:
                         raise HTTPException(status_code=413, detail="File too large")
-    except HTTPException:
-        raise
-    except Exception as exc:
-        raise HTTPException(status_code=502, detail=f"Image fetch failed: {exc}")
+    except (httpx.HTTPError, httpx.InvalidURL) as exc:
+        raise HTTPException(status_code=502, detail=f"Image fetch failed: {exc}") from exc
 
     encoded = base64.b64encode(data).decode("ascii")
     return {"data_url": f"data:{content_type};base64,{encoded}"}
