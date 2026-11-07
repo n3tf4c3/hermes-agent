@@ -12,7 +12,8 @@ const CDN_URL = 'https://v3.fal.media/media/abc123'
 describe('useMediaImage gateway proxy fallback (#74564)', () => {
   const api = vi.fn(async ({ path }: { path: string }) => {
     if (path.startsWith('/api/media/proxy?')) {
-      return { dataUrl: 'data:image/png;base64,cHJveGllZA==' }
+      // The route's real payload (hermes_cli/web_routers/files.py).
+      return { data_url: 'data:image/png;base64,cHJveGllZA==' }
     }
 
     throw new Error(`unexpected path ${path}`)
