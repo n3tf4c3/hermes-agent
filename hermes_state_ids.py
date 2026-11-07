@@ -47,6 +47,15 @@ def is_known_session_id(value: str) -> bool:
     """
     return any(pattern.match(value) for pattern in SESSION_ID_RECOGNIZERS)
 
+
+def is_path_unsafe_session_id(value: str) -> bool:
+    """True when ``value`` cannot be one plain file name in the sessions dir: ``..``, a path
+    separator, a leading drive letter or NUL. Session ids become ``<id>.json``/``.jsonl`` names, so
+    an id from outside (an import) is checked before it is stored, and the file sweep skips a stored
+    one. Same rule as the gateway's strict ``_is_path_unsafe`` for API-supplied ids."""
+    return (".." in value or "/" in value or "\\" in value or "\x00" in value
+            or (len(value) >= 2 and value[0].isalpha() and value[1] == ":"))
+
 # Interactive surfaces (CLI, TUI, agent, branches, imports) share 6 hex chars — the Desktop's
 # session-id candidate regex is pinned to that width. Gateway keys are 8, portability imports 12
 # (many rows minted in the same second).

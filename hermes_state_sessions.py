@@ -15,6 +15,7 @@ from agent.session_activity import (
     ActivityProvenance, bound_activity_description, normalize_activity_provenance,
 )
 from hermes_state_errors import SessionActiveWriteGuardError
+from hermes_state_ids import is_path_unsafe_session_id
 from hermes_state_common import (
     _LISTABLE_CHILD_SQL, _RECOVERABLE_END_REASONS,
     _RECOVERABLE_END_REASONS_SQL, _RESET_CHILD_SQL, _RESET_END_REASONS, _legacy_reset_child_sql, _non_continuation_child_sql,
@@ -1631,8 +1632,9 @@ class SessionSessionsMixin:
         """Remove ``<id>.json``/``.jsonl``, the legacy ``session_<id>.json`` snapshot, and gateway
         ``request_dump_<id>_*.json``; OSError is swallowed so a filesystem hiccup never blocks a
         DB operation. Every historical writer name is swept because a "deleted" session's snapshot
-        can carry plaintext secrets (#20334, #60207)."""
-        if sessions_dir is None:
+        can carry plaintext secrets (#20334, #60207). An id that is not one plain file name (an
+        import from before that check) would point the sweep outside the dir, so its files are left."""
+        if sessions_dir is None or is_path_unsafe_session_id(session_id):
             return
         targets = [sessions_dir / f"{session_id}{suffix}" for suffix in (".json", ".jsonl")]
         targets.append(sessions_dir / f"session_{session_id}.json")
