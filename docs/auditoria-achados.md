@@ -125,3 +125,26 @@ Pendência documental preexistente preservada, SHA-256 B04696F12C1FA4CF958ACA2BB
 
 Limpeza rejeitada pela revisão automática (“blocked by policy”). Contêiner codex-auditoria-hermes-20261106 foi parado, mas retido com seu volume anônimo302f696163d8c5e59ba7f20e56b91e77574a678731b8f5a2ebb71f59a8697707. TEMP retido: C:\Users\pepg\AppData\Local\Temp\codex-auditoria-hermes-20261106 (archive e probes sintéticos). Detalhes no relatório. Não repetir a remoção por outro mecanismo para contornar o bloqueio. Sem comunicação externa, commit ou deploy.
 
+
+## Resolução de 07/11/2026
+
+Sincronização com a estável `v0.23.0` do upstream (merge `016c9b7665`) e correções do fork na branch `sync/v0.23.0`, um commit por achado. Sem push, merge na `main` ou deploy. Detalhes, falsificação e decisões no adendo do relatório de 06/11.
+
+| ID | Status | Resolução | Pendência / condição |
+|---|---|---|---|
+| #8 | RESOLVIDO (código) | Partição `persist:hermes-preview` nega todo pedido e checagem de permissão (`denyPreviewGuestPermissions`) | Prova em Electron real não executada; chega ao usuário só com build do desktop do fork |
+| #9 | RESOLVIDO (código) | WSL abre URL com `explorer.exe <url>`, sem `cmd.exe` | Execução no WSL não reproduzida; build do desktop |
+| #10 | RESOLVIDO | `is_path_unsafe_session_id` barra o ID na importação e a varredura ignora o disco para ID já gravado | Fora da imagem oficial: produção só com reporte ao upstream ou camada |
+| #11 | RESOLVIDO | Proxy de mídia em streaming, interrompido no limite | Idem #10 |
+| #12 | RESOLVIDO | Verificação de sessão do gate no threadpool | Idem #10 |
+| #13 | RESOLVIDO | Veio com a v0.23.0: logout com cookie marcado `same-site`/`cross-site` recebe 403 | Produção recebe com o deploy da v0.23.0 |
+| #14 | RESOLVIDO | Cliente do desktop lê `data_url`, o contrato real | Build do desktop |
+| #15 | RESOLVIDO (repositório) | `deploy/security/` removida; compose fixa `nousresearch/hermes-agent:v0.23.0@sha256:adb7890916de…`; `no-tmp` ok | Produção segue na camada `0.22.5-security-20261101` até o deploy |
+| #16 | RESOLVIDO | Permissão de clipboard usa o `requestingUrl` do frame; `focusedFrameOrigin` movida para `hub-iframe-policy.ts` | Build do desktop |
+| #4 | PARCIAL | v0.23.0: bridge WhatsApp e Photon zerados; raiz 23 (6 em produção), website 26 | follow-redirects 08/11 e joi 11/11 (idade mínima); glob/minimatch só com major de `get-windows`/`eslint` |
+
+A v0.23.0 oficial traz instalado o que a camada fazia: brotlicffi 1.2.1.0 (#6), pyasn1 0.6.5, tornado 6.6, Photon undici 7.30.1 e zod 4.6.7 (#4), e a recusa de escrita entre origens do #7 (conferido dentro da imagem). Nos conflitos do merge, `pyproject.toml`/`uv.lock` e os locks npm seguiram o upstream; o bloco `constraint-dependencies` do fork saiu (redundante, forçaria filelock 4.2.1 < 4.2.6, e `tests/pm/test_workspace.py` exige a ausência dele).
+
+Validação (contêiner descartável da imagem oficial v0.23.0, sem pastas do host, rede desligada nos testes): suíte Python completa com 69.626 aprovados; os 367 arquivos com falha são de ambiente e falham igual na base. Desktop: typecheck ok, lint 0 erros, vitest 17.132 aprovados, com as falhas restantes iguais na base ou só sob carga. `scripts/check` 14/14 ok contra a árvore da v0.23.0. O `test_hermes_state.py` (296 testes) passa em 362 s; na auditoria foi interrompido pelo limite padrão de 300 s, não por travar. Build de produção do desktop não executado.
+
+Próximo ID: 17.
