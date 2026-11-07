@@ -373,13 +373,14 @@ export async function gatewayImageProxyDataUrl(url: string, owner?: OwnerScope):
   }
 
   try {
-    const result = await hermesApi<string | { dataUrl?: string }>({
+    // The route answers `{ data_url }` (hermes_cli/web_routers/files.py), no desktop transport renames its keys.
+    const result = await hermesApi<{ data_url?: string }>({
       path: `/api/media/proxy?url=${encodeURIComponent(url)}`,
       ...(owner?.connectionId ? { connectionId: owner.connectionId } : {}),
       ...(owner?.profile ? { profile: owner.profile } : {})
     })
 
-    return typeof result === 'string' ? result : result.dataUrl || ''
+    return result.data_url || ''
   } catch {
     return ''
   }

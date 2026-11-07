@@ -319,7 +319,8 @@ describe('gatewayMediaDataUrl', () => {
 describe('gatewayImageProxyDataUrl (#74564)', () => {
   const api = vi.fn(async ({ path }: { path: string }) => {
     if (path.startsWith('/api/media/proxy?')) {
-      return { dataUrl: 'data:image/png;base64,cGRveGllZA==' }
+      // The route's real payload (hermes_cli/web_routers/files.py), as every transport delivers it.
+      return { data_url: 'data:image/png;base64,cGRveGllZA==' }
     }
 
     throw new Error(`unexpected path ${path}`)
