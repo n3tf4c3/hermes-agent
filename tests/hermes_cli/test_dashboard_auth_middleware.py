@@ -638,3 +638,36 @@ def test_all_providers_unreachable_returns_503(_gated_state):
     assert "unreachable" in r.text.lower()
 
 
+
+
+def test_gate_verifies_sessions_off_the_event_loop(gated_app):
+    """A provider's ``verify_session`` can block on the network (a cold or unknown-kid JWKS fetch);
+    run on the event loop it stalls every other request. Cookie and bearer checks both run it in
+    the threadpool, as the refresh path already does."""
+    import asyncio
+
+    class LoopProbe(StubAuthProvider):
+        def __init__(self):
+            super().__init__()
+            self.on_event_loop: list[bool] = []
+
+        def verify_session(self, *, access_token: str):
+            try:
+                asyncio.get_running_loop()
+                self.on_event_loop.append(True)
+            except RuntimeError:
+                self.on_event_loop.append(False)
+            return super().verify_session(access_token=access_token)
+
+    probe = LoopProbe()
+    clear_providers()
+    register_provider(probe)
+    _complete_stub_login(gated_app)
+
+    assert gated_app.get("/api/auth/me").status_code == 200
+    bearer = gated_app.cookies.get(f"__Host-{SESSION_AT_COOKIE}")  # gated HTTPS prefixes the name
+    assert bearer
+    assert gated_app.get("/api/auth/me", headers={"Authorization": f"Bearer {bearer}"}).status_code == 200
+
+    assert len(probe.on_event_loop) >= 2
+    assert not any(probe.on_event_loop), probe.on_event_loop
