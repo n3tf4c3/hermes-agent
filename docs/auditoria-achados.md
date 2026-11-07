@@ -148,3 +148,18 @@ A v0.23.0 oficial traz instalado o que a camada fazia: brotlicffi 1.2.1.0 (#6), 
 Validação (contêiner descartável da imagem oficial v0.23.0, sem pastas do host, rede desligada nos testes): suíte Python completa com 69.626 aprovados; os 367 arquivos com falha são de ambiente e falham igual na base. Desktop: typecheck ok, lint 0 erros, vitest 17.132 aprovados, com as falhas restantes iguais na base ou só sob carga. `scripts/check` 14/14 ok contra a árvore da v0.23.0. O `test_hermes_state.py` (296 testes) passa em 362 s; na auditoria foi interrompido pelo limite padrão de 300 s, não por travar. Build de produção do desktop não executado.
 
 Próximo ID: 17.
+
+## Decisão de 07/11/2026 — o fork só acompanha o upstream
+
+Decisão do titular: o fork não mantém correções próprias; ele só sincroniza as releases estáveis do upstream. O commit `5eef0cb9bc` devolve código e testes à v0.23.0 (fora do upstream ficam só os guias de agente, este ledger, `deploy/` e `.ai-memory.toml`). O GitHub Actions do fork foi desativado: rodava os workflows do upstream sem os runners e segredos dele.
+
+| ID | Status | Condição |
+|---|---|---|
+| #5 | ABERTO (aceito) — depende do upstream | Correção do fork (`ff2cb0184b`) revertida; reavaliar a cada release |
+| #8, #9, #10, #11, #12, #14, #16 | ABERTO (aceito) — dependem do upstream | Correções da seção anterior revertidas, com a validação registrada no adendo do relatório de 06/11; reavaliar a cada release; reporte ao upstream só por decisão do titular |
+| #4 | ABERTO (aceito) — depende do upstream | Atualizações de dependência só vêm com as releases; as datas de 08/11 e 11/11 passam a ser apenas conferência do que o upstream publicou |
+| #13 | RESOLVIDO | Veio com a v0.23.0 |
+| #15 | RESOLVIDO | Camada removida; compose fixa a imagem oficial |
+| #1–#3, #6, #7 | RESOLVIDOS | Pela própria v0.23.0 (o GHSA-4w4r-jmvh-vcv9 do #7 foi fechado pelo upstream) |
+
+Produção segue na camada `0.22.5-security-20261101`. A troca para a imagem oficial v0.23.0 está pendente: o primeiro `pull` no Orange Pi coincidiu com um reinício abrupto do servidor e deixou a extração danificada (ver o relatório de 06/11).
