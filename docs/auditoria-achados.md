@@ -97,3 +97,31 @@ Status **RESOLVIDO** na implantação atual. Reabrir se o dashboard for publicad
   - cópia adulterada do middleware faz o build falhar.
 - **Produção (Orange Pi, 01/11 ~12:20Z):** build arm64 no Pi (47 s, cache), mesma prova na candidata, troca só da linha `image:` do compose, parada de 13 s, 0 restarts. Pós: `overall ok`, 3/3 plataformas, login 200, 401 sem sessão e com bearer inválido, `same-site`/`cross-site` 403, porta só em `127.0.0.1:9119`, endurecimento igual. Comprovantes em `/srv/containers/hermes/security-20261101/receipts/`. Rollback: `compose.yml.bak-<TS>-hermes-security-20261101` e volume `hermes-rollback-<TS>`.
 - **Upstream:** reporte privado enviado em 01/11 pelo GitHub Security Advisory (`GHSA-4w4r-jmvh-vcv9`, estado triage). Texto em `C:\Codes\relatorios\hermes-agent\reporte-upstream-achado-7-final.md`. Quando uma estável trouxer a correção (ou equivalente), retirar `apply_source_fixes.py` junto com a camada.
+
+## Auditoria de 06/11/2026
+
+HEAD: c3793ac74ce300f66c550dda86a76ea34a595360. Relatório externo: C:\Codes\relatorios\hermes-agent\auditoria-2026-11-06.md. Revisão com três agentes, validação independente dos altos e probes sintéticos. Sem correção de código.
+
+| ID | Severidade | Estado | Causa / evidência |
+|---|---|---|---|
+| #8 | alta | ABERTO — potencial; código e semântica do runtime confirmados, sem captura | Preview remoto não recebe política de permissões da sua sessão. apps/desktop/src/app/chat/right-rail/preview-pane.tsx:1136–1141; apps/desktop/electron/main.ts:6830–6852, 12285–12294; apps/desktop/electron/preview-guest-throttle.ts:17–27. |
+| #9 | alta | ABERTO — potencial; argv reproduzido, interoperabilidade não reproduzida | Abertura de URL no WSL entrega metacaracteres ao CMD. apps/desktop/electron/external-open.ts:113–153; apps/desktop/electron/main.ts:2219–2226,17028–17033; apps/desktop/src/lib/external-link.tsx:219–221,337–355. |
+| #4 | média | PARCIAL — residual histórico com evidência atual | Advisories residuais nos locks de tooling, site e extras. package-lock.json:10714,12331,14219; website/package-lock.json:6641,8630,9517,9734,11146,13908,17289; scripts/whatsapp-bridge/package-lock.json (qs 6.16.0); uv.lock (oauthlib 4.0.0). |
+| #10 | média | ABERTO — confirmado em fixture isolada | ID importado pode direcionar a limpeza para fora de sessions. hermes_state_portability.py:668,681–709,719–728; hermes_state_sessions.py:1654–1665,1777–1787; hermes_cli/sessions_cmd.py:629–643,818. |
+| #11 | média | ABERTO — consumo além do teto reproduzido; DoS potencial | Limite do proxy de mídia é aplicado depois do download integral. hermes_cli/web_routers/files.py:53,385–416. |
+| #12 | média | ABERTO — bloqueio reproduzido com transporte simulado | Consulta JWKS síncrona bloqueia o event loop de autenticação. hermes_cli/dashboard_auth/middleware.py:146–148,191–199,217–227; plugins/dashboard_auth/_shared.py:213–243,325–332; plugins/dashboard_auth/nous/__init__.py:97–101. |
+| #13 | baixa | ABERTO — resposta servidor reproduzida com entrada sintética | Logout público ignora a proteção de escrita entre origens. hermes_cli/dashboard_auth/middleware.py:40–42,183–209; hermes_cli/dashboard_auth/routes.py:496–512. |
+| #14 | baixa | ABERTO — contrato reproduzido com transporte simulado | Desktop descarta a resposta válida do proxy de imagens. hermes_cli/web_routers/files.py:419; apps/desktop/src/lib/media.ts:349–355; apps/desktop/src/hooks/use-media-image.ts (retry/onError); apps/desktop/src/lib/media.remote.test.ts:235–258. |
+| #15 | baixa | ABERTO — gate reproduzido | Camada de segurança reprova o check obrigatório de caminhos temporários. deploy/security/apply_source_fixes.py:9; scripts/check_no_tmp_literals.py; scripts/check. |
+| #16 | baixa | ABERTO — potencial, análise estática | Permissão de clipboard consulta a origem do documento principal. apps/desktop/electron/main.ts:6832,6849,6863–6873; website/src/pages/skills/index.tsx:252–257. |
+
+#1–3, #5, #6 e #7 mantidos resolvidos no contexto registrado. #4 continua PARCIAL; o advisory histórico de braces foi retirado oficialmente (GHSA-vfj7-8cjw-p6xm), e não permanece ativo. As datas de reavaliação de follow-redirects/joi (08 e 11/11) são preservadas. A decisão sobre HTTP sem Fetch Metadata do #7 permanece; #13 é uma exceção de rota com header presente.
+
+Validação: PM build_env aprovado; runner obrigatório em contêiner sem bind mounts do host e com rede desconectada: 1.650 testes aprovados, 27 ignorados, 214 arquivos, um arquivo interrompido por timeout de 300s (tests/hermes_state/test_hermes_state.py), exit 1. Não há aprovação integral da suíte. scripts/check: 11/12, falha no-tmp (#15); base sintética igual ao HEAD, sem diff medido para health/ruff. Probes confirmaram #10/#11/#12/#13/#14 em ambiente sintético; #9 só até argv, #8/#16 permanecem estáticos/potenciais. Nenhum dispositivo, serviço real ou dado do usuário foi usado.
+
+npm audit: raiz23 (2 altas,21 moderadas), omit-dev6 moderadas, website29 (3 altas,3 moderadas,23 baixas), WhatsApp1 moderada, Photon0. OSV:327 deps Python, oauthlib4.0.0 com advisory de servidor DeviceCodeGrant, uso rastreado é cliente e não demonstra exploração. Projeto virtual0.0.0 não foi tratado como versão real vulnerável.
+
+Pendência documental preexistente preservada, SHA-256 B04696F12C1FA4CF958ACA2BB43C91E8F8456E2686665097C2C2598D02C436CE. Próximo ID:17.
+
+Limpeza rejeitada pela revisão automática (“blocked by policy”). Contêiner codex-auditoria-hermes-20261106 foi parado, mas retido com seu volume anônimo302f696163d8c5e59ba7f20e56b91e77574a678731b8f5a2ebb71f59a8697707. TEMP retido: C:\Users\pepg\AppData\Local\Temp\codex-auditoria-hermes-20261106 (archive e probes sintéticos). Detalhes no relatório. Não repetir a remoção por outro mecanismo para contornar o bloqueio. Sem comunicação externa, commit ou deploy.
+
