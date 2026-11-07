@@ -6744,7 +6744,7 @@ function installMediaPermissions() {
   // and every other frame — artifact previews included — stays denied.
   session.defaultSession.setPermissionRequestHandler((webContents, permission, callback, details) => {
     if ((permission as string) === 'clipboard-sanitized-write') {
-      callback(isHermesHubClipboardWrite(focusedFrameOrigin(webContents)))
+      callback(isHermesHubClipboardWrite(focusedFrameOrigin(webContents, details)))
 
       return
     }
@@ -6759,9 +6759,9 @@ function installMediaPermissions() {
   // the shared predicate runs with `undefined` details and allows the capture
   // permissions — identical policy to the request handler below, just without
   // the metadata refinement (absent metadata is allowed there too).
-  session.defaultSession.setPermissionCheckHandler((webContents, permission) => {
+  session.defaultSession.setPermissionCheckHandler((webContents, permission, _requestingOrigin, details) => {
     if ((permission as string) === 'clipboard-sanitized-write') {
-      return isHermesHubClipboardWrite(focusedFrameOrigin(webContents))
+      return isHermesHubClipboardWrite(focusedFrameOrigin(webContents, details))
     }
 
     return isMediaCapturePermission(permission, undefined)
