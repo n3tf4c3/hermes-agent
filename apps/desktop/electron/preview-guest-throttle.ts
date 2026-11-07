@@ -8,6 +8,19 @@ export interface PreviewGuestAttachPrefs {
   preload?: string
 }
 
+/**
+ * The preview renders untrusted remote pages in its own partition, which the
+ * default session's handlers do not cover. Without handlers Electron grants
+ * every request (camera, microphone, notifications, ...), so the partition
+ * denies them all. Call after `ready`, before the first preview navigates.
+ */
+export function denyPreviewGuestPermissions(
+  previewSession: Pick<Session, 'setPermissionCheckHandler' | 'setPermissionRequestHandler'>
+): void {
+  previewSession.setPermissionRequestHandler((_contents, _permission, callback) => callback(false))
+  previewSession.setPermissionCheckHandler(() => false)
+}
+
 /** Keep the preload partition-scoped; idle guests use Chromium's throttling. */
 export function applyPreviewGuestAttachPrefs(
   webPreferences: PreviewGuestAttachPrefs,

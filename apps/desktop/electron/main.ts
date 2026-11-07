@@ -440,7 +440,11 @@ import { onPreviewWatchOwnerDestroyed, sendPreviewFileChangedToOwner } from './p
 import { hasClosePreviewFlag, previewGuestInputAction } from './preview-guest-escape'
 import { registerPreviewGuestIpc } from './preview-guest-ipc'
 import { commandFocusedGuest } from './preview-guest-offscreen'
-import { applyPreviewGuestAttachPrefs } from './preview-guest-throttle'
+import {
+  applyPreviewGuestAttachPrefs,
+  denyPreviewGuestPermissions,
+  PREVIEW_GUEST_PARTITION
+} from './preview-guest-throttle'
 import { PreviewReachRegistry } from './preview-reach'
 import { previewHttpUrlTarget } from './preview-url-target'
 import { FirstRunSetupResetError, runPrimaryBackendStartup } from './primary-backend-startup'
@@ -12172,6 +12176,8 @@ function installPreviewGuestEscapeHatch() {
  * free.
  */
 function installPreviewGuestPreload() {
+  denyPreviewGuestPermissions(session.fromPartition(PREVIEW_GUEST_PARTITION))
+
   app.on('web-contents-created', (_event, contents) => {
     if (contents.getType() !== 'window') {
       return
