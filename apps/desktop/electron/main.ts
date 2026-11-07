@@ -313,7 +313,12 @@ import {
   writeSecretFileAtomic
 } from './hardening'
 import { assertNotPassiveSpawn } from './host-backend-singleton'
-import { HERMES_HUB_FALLBACK_ORIGIN, HERMES_HUB_ORIGIN, isHermesHubClipboardWrite } from './hub-iframe-policy'
+import {
+  focusedFrameOrigin,
+  HERMES_HUB_FALLBACK_ORIGIN,
+  HERMES_HUB_ORIGIN,
+  isHermesHubClipboardWrite
+} from './hub-iframe-policy'
 import { requestHudClose } from './hud-close'
 import { cursorPointInWindow } from './hud-cursor'
 import { startHudGameOverlayWatch } from './hud-game-overlay'
@@ -440,11 +445,7 @@ import { onPreviewWatchOwnerDestroyed, sendPreviewFileChangedToOwner } from './p
 import { hasClosePreviewFlag, previewGuestInputAction } from './preview-guest-escape'
 import { registerPreviewGuestIpc } from './preview-guest-ipc'
 import { commandFocusedGuest } from './preview-guest-offscreen'
-import {
-  applyPreviewGuestAttachPrefs,
-  denyPreviewGuestPermissions,
-  PREVIEW_GUEST_PARTITION
-} from './preview-guest-throttle'
+import { applyPreviewGuestAttachPrefs, denyPreviewGuestPermissions, PREVIEW_GUEST_PARTITION } from './preview-guest-throttle'
 import { PreviewReachRegistry } from './preview-reach'
 import { previewHttpUrlTarget } from './preview-url-target'
 import { FirstRunSetupResetError, runPrimaryBackendStartup } from './primary-backend-startup'
@@ -6766,32 +6767,6 @@ function installMediaPermissions() {
 
     return isMediaCapturePermission(permission, undefined)
   })
-}
-
-// Origin of the frame a permission request came from. The request handler is
-// given the webContents of the TOP document (Chromium routes subframe
-// permission requests through it in Electron 40 without exposing the frame
-// directly), so when the top document is NOT on a hub origin we fall back to
-// the request's own `requestingUrl` — the URL the frame actually asked for —
-// whose origin is exact for both hub deployments and `null` for anything
-// sandboxed or opaque.
-function focusedFrameOrigin(
-  webContents: { getURL?: () => string } | null | undefined,
-  details?: { requestingUrl?: string }
-): string | null {
-  try {
-    if (details?.requestingUrl) {
-      return new URL(details.requestingUrl).origin
-    }
-
-    if (webContents?.getURL) {
-      return new URL(webContents.getURL()).origin
-    }
-  } catch {
-    // Unparseable URL — report no origin; callers deny.
-  }
-
-  return null
 }
 
 /** The picker embed URL the hub iframe starts on (both deployments). */
